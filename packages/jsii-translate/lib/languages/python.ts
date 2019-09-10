@@ -1,8 +1,9 @@
 import ts = require('typescript');
 import { OTree } from "../o-tree";
-import { extractModuleName, stringFromLiteral, stripCommentMarkers } from '../typescript/ast-utils';
+import { stripCommentMarkers } from '../typescript/ast-utils';
+import { ImportStatement } from '../typescript/imports';
 import { startsWithUppercase } from "../util";
-import { AstContext, DefaultVisitor } from "../visitor";
+import { AstContext, DefaultVisitor, nimpl } from "../visitor";
 
 export class PythonVisitor extends DefaultVisitor {
   public commentRange(node: ts.CommentRange, context: AstContext): OTree {
@@ -15,18 +16,25 @@ export class PythonVisitor extends DefaultVisitor {
     return new OTree([...commentText.split('\n').map(l => `# ${l}\n`)]);
   }
 
-  public importEqualsDeclaration(node: ts.ImportEqualsDeclaration, context: AstContext): OTree {
-    const identifier = mangleIdentifier(context.textOf(node.name));
-    const moduleName = this.convertModuleReference(extractModuleName(node.moduleReference));
-    return new OTree([`import ${moduleName} as ${identifier}`], [], {
-      newline: true,
-    });
-  }
+  public importStatement(node: ImportStatement, context: AstContext): OTree {
+    const moduleName = this.convertModuleReference(node.packageName);
+    if (node.imports.import === 'full') {
+      return new OTree([`import ${moduleName} as ${mangleIdentifier(node.imports.alias)}`], [], {
+        newline: true,
+      });
+    }
+    if (node.imports.import === 'selective') {
+      const imports = node.imports.elements.map(im =>
+          im.alias
+          ? `${mangleIdentifier(im.sourceName)} as ${mangleIdentifier(im.alias)}`
+          : mangleIdentifier(im.sourceName));
 
-  public importDeclaration(node: ts.ImportDeclaration, context: AstContext): OTree {
-    const moduleName = this.convertModuleReference(stringFromLiteral(node.moduleSpecifier));
-    const clause = node.importClause ? context.textOf(node.importClause.) : '';
-    return new OTree([`import ${moduleName} - ${clause}`]);
+      return new OTree([`from ${moduleName} import ${imports.join(', ')}`], [], {
+        newline: true,
+      });
+    }
+
+    return nimpl(node.node, context);
   }
 
   public token<A extends ts.SyntaxKind>(node: ts.Token<A>, context: AstContext): OTree {

@@ -1,5 +1,6 @@
 import ts = require('typescript');
 import { EMPTY_NODE, OTree, UnknownSyntax } from './o-tree';
+import { analyzeImportDeclaration, analyzeImportEquals, ImportStatement } from './typescript/imports';
 
 export interface AstContext {
   sourceFile: ts.SourceFile;
@@ -14,8 +15,7 @@ export interface AstContext {
 
 export interface AstVisitor {
   commentRange(node: ts.CommentRange, context: AstContext): OTree;
-  importEqualsDeclaration(node: ts.ImportEqualsDeclaration, context: AstContext): OTree;
-  importDeclaration(node: ts.ImportDeclaration, context: AstContext): OTree;
+  importStatement(node: ImportStatement, context: AstContext): OTree;
   stringLiteral(node: ts.StringLiteral, children: AstContext): OTree;
   functionDeclaration(node: ts.FunctionDeclaration, children: AstContext): OTree;
   identifier(node: ts.Identifier, children: AstContext): OTree;
@@ -50,12 +50,8 @@ export class VisualizeAstVisitor implements AstVisitor {
     return new OTree([]);
   }
 
-  public importEqualsDeclaration(node: ts.ImportEqualsDeclaration, children: AstContext): OTree {
-    return nimpl(node, children);
-  }
-
-  public importDeclaration(node: ts.ImportDeclaration, children: AstContext): OTree {
-    return nimpl(node, children);
+  public importStatement(node: ImportStatement, context: AstContext): OTree {
+    return nimpl(node.node, context);
   }
 
   public functionDeclaration(node: ts.FunctionDeclaration, children: AstContext): OTree {
@@ -159,12 +155,8 @@ export class DefaultVisitor implements AstVisitor {
     return new OTree([]);
   }
 
-  public importEqualsDeclaration(node: ts.ImportEqualsDeclaration, children: AstContext): OTree {
-    return nimpl(node, children);
-  }
-
-  public importDeclaration(node: ts.ImportDeclaration, children: AstContext): OTree {
-    return nimpl(node, children);
+  public importStatement(node: ImportStatement, context: AstContext): OTree {
+    return nimpl(node.node, context);
   }
 
   public functionDeclaration(node: ts.FunctionDeclaration, children: AstContext): OTree {
@@ -374,8 +366,8 @@ export function visitTree(file: ts.SourceFile, root: ts.Node, visitor: AstVisito
     if (tree.kind === ts.SyntaxKind.SyntaxList) { return visitor.syntaxList(tree as ts.SyntaxList, context); }
 
     // Nodes with meaning
-    if (ts.isImportEqualsDeclaration(tree)) { return visitor.importEqualsDeclaration(tree, context); }
-    if (ts.isImportDeclaration(tree)) { return visitor.importDeclaration(tree, context); }
+    if (ts.isImportEqualsDeclaration(tree)) { return visitor.importStatement(analyzeImportEquals(tree, context), context); }
+    if (ts.isImportDeclaration(tree)) { return visitor.importStatement(analyzeImportDeclaration(tree, context), context); }
     if (ts.isStringLiteral(tree)) { return visitor.stringLiteral(tree, context); }
     if (ts.isFunctionDeclaration(tree)) { return visitor.functionDeclaration(tree, context); }
     if (ts.isIdentifier(tree)) { return visitor.identifier(tree, context); }
