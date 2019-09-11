@@ -1,16 +1,4 @@
 # jsii-translate
 
-Super half-baked PoC of translating TypeScript to Python.
-
-## Preparing
-
-```
-npm install
-```
-
-## Running
-
-```
-npm run demo --
-npm run demo -- --python
-```
+Utility to transcribe example code snippets from TypeScript to other jsii-supported languages.
+Knows about jsii conventions to do the translations.

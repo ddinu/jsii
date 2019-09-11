@@ -1,5 +1,6 @@
 import ts = require('typescript');
 import { EMPTY_NODE, OTree, UnknownSyntax } from './o-tree';
+import { nodeChildren } from './typescript/ast-utils';
 import { analyzeImportDeclaration, analyzeImportEquals, ImportStatement } from './typescript/imports';
 
 export interface AstContext {
@@ -19,7 +20,6 @@ export interface AstVisitor {
   stringLiteral(node: ts.StringLiteral, children: AstContext): OTree;
   functionDeclaration(node: ts.FunctionDeclaration, children: AstContext): OTree;
   identifier(node: ts.Identifier, children: AstContext): OTree;
-  syntaxList(node: ts.SyntaxList, children: AstContext): OTree;
   block(node: ts.Block, children: AstContext): OTree;
   parameterDeclaration(node: ts.ParameterDeclaration, children: AstContext): OTree;
   returnStatement(node: ts.ReturnStatement, context: AstContext): OTree;
@@ -38,6 +38,11 @@ export interface AstVisitor {
   jsDoc(node: ts.JSDoc, context: AstContext): OTree;
   arrayLiteralExpression(node: ts.ArrayLiteralExpression, context: AstContext): OTree;
   shorthandPropertyAssignment(node: ts.ShorthandPropertyAssignment, context: AstContext): OTree;
+  forOfStatement(node: ts.ForOfStatement, context: AstContext): OTree;
+  classDeclaration(node: ts.ClassDeclaration, context: AstContext): OTree;
+  constructorDeclaration(node: ts.ConstructorDeclaration, context: AstContext): OTree;
+  propertyDeclaration(node: ts.PropertyDeclaration, context: AstContext): OTree;
+  methodDeclaration(node: ts.MethodDeclaration, context: AstContext): OTree;
 }
 
 export class VisualizeAstVisitor implements AstVisitor {
@@ -63,10 +68,6 @@ export class VisualizeAstVisitor implements AstVisitor {
   }
 
   public identifier(node: ts.Identifier, children: AstContext): OTree {
-    return nimpl(node, children);
-  }
-
-  public syntaxList(node: ts.SyntaxList, children: AstContext): OTree {
     return nimpl(node, children);
   }
 
@@ -137,6 +138,26 @@ export class VisualizeAstVisitor implements AstVisitor {
   public shorthandPropertyAssignment(node: ts.ShorthandPropertyAssignment, context: AstContext): OTree {
     return nimpl(node, context);
   }
+
+  public forOfStatement(node: ts.ForOfStatement, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public classDeclaration(node: ts.ClassDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public constructorDeclaration(node: ts.ConstructorDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public propertyDeclaration(node: ts.PropertyDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public methodDeclaration(node: ts.MethodDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
 }
 
 /**
@@ -169,11 +190,6 @@ export class DefaultVisitor implements AstVisitor {
 
   public identifier(node: ts.Identifier, _children: AstContext): OTree {
     return new OTree([node.text]);
-  }
-
-  public syntaxList(_node: ts.SyntaxList, children: AstContext): OTree {
-    // This groups nodes together, don't really know the purpose but we don't need it.
-    return new OTree([], children.children(_node));
   }
 
   public block(node: ts.Block, children: AstContext): OTree {
@@ -262,6 +278,26 @@ export class DefaultVisitor implements AstVisitor {
   public shorthandPropertyAssignment(node: ts.ShorthandPropertyAssignment, context: AstContext): OTree {
     return nimpl(node, context);
   }
+
+  public forOfStatement(node: ts.ForOfStatement, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public classDeclaration(node: ts.ClassDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public constructorDeclaration(node: ts.ConstructorDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public propertyDeclaration(node: ts.PropertyDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
+
+  public methodDeclaration(node: ts.MethodDeclaration, context: AstContext): OTree {
+    return nimpl(node, context);
+  }
 }
 
 export function nimpl(node: ts.Node, context: AstContext) {
@@ -292,7 +328,7 @@ export function visitTree(file: ts.SourceFile, root: ts.Node, visitor: AstVisito
   const context: AstContext = {
     sourceFile: file,
     children(node: ts.Node) {
-      return node.getChildren(file).map(recurse);
+      return nodeChildren(node).map(recurse);
     },
     convert(node: ts.Node | undefined): OTree {
       if (node === undefined) { return EMPTY_NODE; }
@@ -363,7 +399,6 @@ export function visitTree(file: ts.SourceFile, root: ts.Node, visitor: AstVisito
         separator: '\n'
       });
     }
-    if (tree.kind === ts.SyntaxKind.SyntaxList) { return visitor.syntaxList(tree as ts.SyntaxList, context); }
 
     // Nodes with meaning
     if (ts.isImportEqualsDeclaration(tree)) { return visitor.importStatement(analyzeImportEquals(tree, context), context); }
@@ -389,12 +424,18 @@ export function visitTree(file: ts.SourceFile, root: ts.Node, visitor: AstVisito
     if (ts.isJSDoc(tree)) { return visitor.jsDoc(tree, context); }
     if (ts.isArrayLiteralExpression(tree)) { return visitor.arrayLiteralExpression(tree, context); }
     if (ts.isShorthandPropertyAssignment(tree)) { return visitor.shorthandPropertyAssignment(tree, context); }
+    if (ts.isForOfStatement(tree)) { return visitor.forOfStatement(tree, context); }
+    if (ts.isClassDeclaration(tree)) { return visitor.classDeclaration(tree, context); }
+    if (ts.isConstructorDeclaration(tree)) { return visitor.constructorDeclaration(tree, context); }
+    if (ts.isPropertyDeclaration(tree)) { return visitor.propertyDeclaration(tree, context); }
+    if (ts.isMethodDeclaration(tree)) { return visitor.methodDeclaration(tree, context); }
 
     const nodeKind = ts.SyntaxKind[tree.kind];
 
-    context.report(tree, `Unsupported TypeScript language feature (${nodeKind}). Please rewrite this example.`);
+    // tslint:disable-next-line:max-line-length
+    context.report(tree, `This TypeScript language feature (${nodeKind}) is not supported in examples because we cannot translate it. Please rewrite this example.`);
 
-    return new UnknownSyntax([`<${nodeKind}>`], context.children(tree), {
+    return new UnknownSyntax([`<${nodeKind} ${context.textOf(tree)}>`], context.children(tree), {
       newline: true,
       indent: 2,
     });

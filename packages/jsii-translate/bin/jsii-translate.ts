@@ -25,8 +25,8 @@ async function main() {
       : new LiteralSource(fs.readFileSync(0, "utf-8"), fakeInputFileName);
 
   const result = argv.markdown
-      ? await translateMarkdown(source, visitor)
-      : await translateTypeScript(source, visitor);
+      ? translateMarkdown(source, visitor)
+      : translateTypeScript(source, visitor);
 
   process.stdout.write(renderTree(result.tree));
 

@@ -1,6 +1,6 @@
 import ts = require('typescript');
 import { AstContext } from '../visitor';
-import { stringFromLiteral } from "./ast-utils";
+import { stringFromLiteral, matchAst, nodeOfType, allOfType } from "./ast-utils";
 
 /**
  * Our own unification of import statements
@@ -20,62 +20,57 @@ export interface ImportBinding {
 }
 
 export function analyzeImportEquals(node: ts.ImportEqualsDeclaration, context: AstContext): ImportStatement {
+  let moduleName = '???';
+  matchAst(node.moduleReference,
+    nodeOfType('ref', ts.SyntaxKind.ExternalModuleReference),
+    bindings => {
+      moduleName = stringFromLiteral(bindings.ref.expression);
+    });
+
   return {
     node,
-    packageName: extractModuleName(node.moduleReference),
+    packageName: moduleName,
     imports: { import: 'full', alias: context.textOf(node.name) }
   };
 }
 
 export function analyzeImportDeclaration(node: ts.ImportDeclaration, context: AstContext): ImportStatement {
-  const starImport = starImportName(node.importClause, context);
-  if (starImport) {
+  const packageName = stringFromLiteral(node.moduleSpecifier);
+
+  const starBindings = matchAst(node,
+    nodeOfType(ts.SyntaxKind.ImportDeclaration,
+      nodeOfType(ts.SyntaxKind.ImportClause,
+        nodeOfType('namespace', ts.SyntaxKind.NamespaceImport))));
+
+  if (starBindings) {
     return {
       node,
-      packageName: stringFromLiteral(node.moduleSpecifier),
-      imports: { import: 'full', alias: starImport }
+      packageName,
+      imports: { import: 'full', alias: context.textOf(starBindings.namespace.name) }
     };
   }
 
-  const elements: ImportBinding[] = [];
+  const namedBindings = matchAst(node,
+    nodeOfType(ts.SyntaxKind.ImportDeclaration,
+      nodeOfType(ts.SyntaxKind.ImportClause,
+        nodeOfType(ts.SyntaxKind.NamedImports,
+          allOfType(ts.SyntaxKind.ImportSpecifier, 'specifiers')))));
 
-  if (node.importClause && node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
-    elements.push(...node.importClause.namedBindings.elements.map(binding => (
-      // regular import { name }, renamed import { propertyName, name }
-      binding.propertyName ? {
-        sourceName: context.textOf(binding.propertyName),
-        alias: binding.name ? context.textOf(binding.name) : '???'
-      } : {
-        sourceName: binding.name ? context.textOf(binding.name) : '???'
-      })));
+  const elements: ImportBinding[] = [];
+  if (namedBindings) {
+    elements.push(...namedBindings.specifiers.map(spec => (
+    // regular import { name }, renamed import { propertyName, name }
+    spec.propertyName ? {
+      sourceName: context.textOf(spec.propertyName),
+      alias: spec.name ? context.textOf(spec.name) : '???'
+    } : {
+      sourceName: spec.name ? context.textOf(spec.name) : '???'
+    })));
   }
 
   return {
     node,
-    packageName: stringFromLiteral(node.moduleSpecifier),
+    packageName,
     imports: { import: 'selective', elements }
   };
-
-}
-
-/**
- * Extract the literal module name from a ModuleReference
- */
-function extractModuleName(ref: ts.ModuleReference) {
-  if (ts.isExternalModuleReference(ref)) {
-    return stringFromLiteral(ref.expression);
-  }
-
-  return '???';
-}
-
-function starImportName(expr: ts.ImportClause | undefined, context: AstContext): string | undefined {
-  if (!expr) { return undefined; }
-  const bindings = expr.namedBindings;
-  if (!bindings) { return undefined; }
-  if (ts.isNamespaceImport(bindings)) {
-    return context.textOf(bindings.name);
-
-  }
-  return undefined;
 }

@@ -8,13 +8,13 @@ export function startsWithUppercase(x: string) {
   return x.match(/^[A-Z]/);
 }
 
-export async function inTempDir<T>(block: () => Promise<T>): Promise<T> {
+export function inTempDir<T>(block: () => T): T {
   const origDir = process.cwd();
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'jsii'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jsii'));
   process.chdir(tmpDir);
-  const ret = await block();
+  const ret = block();
   process.chdir(origDir);
-  await fs.remove(tmpDir);
+  fs.removeSync(tmpDir);
   return ret;
 }
 

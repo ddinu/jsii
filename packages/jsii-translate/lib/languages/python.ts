@@ -1,16 +1,12 @@
 import ts = require('typescript');
 import { OTree } from "../o-tree";
-import { stripCommentMarkers } from '../typescript/ast-utils';
+import { matchAst, nodeOfType, stripCommentMarkers } from '../typescript/ast-utils';
 import { ImportStatement } from '../typescript/imports';
 import { startsWithUppercase } from "../util";
 import { AstContext, DefaultVisitor, nimpl } from "../visitor";
 
 export class PythonVisitor extends DefaultVisitor {
   public commentRange(node: ts.CommentRange, context: AstContext): OTree {
-    if (!node.hasTrailingNewLine) {
-      throw new Error(`Cannot convert inline style comment to Python!`);
-    }
-
     const commentText = stripCommentMarkers(context.textAt(node.pos, node.end), node.kind === ts.SyntaxKind.MultiLineCommentTrivia);
 
     return new OTree([...commentText.split('\n').map(l => `# ${l}\n`)]);
@@ -49,14 +45,29 @@ export class PythonVisitor extends DefaultVisitor {
   }
 
   public functionDeclaration(node: ts.FunctionDeclaration, context: AstContext): OTree {
+    return this.functionLike(node, context);
+  }
+
+  public constructorDeclaration(node: ts.ConstructorDeclaration, context: AstContext): OTree {
+    return this.functionLike(node, context, { isConstructor: true, inClass: true });
+  }
+
+  public methodDeclaration(node: ts.MethodDeclaration, context: AstContext): OTree {
+    return this.functionLike(node, context, { inClass: true });
+  }
+
+  public functionLike(node: ts.FunctionLikeDeclarationBase, context: AstContext, opts: { isConstructor?: boolean, inClass?: boolean } = {}): OTree {
     return new OTree([
       'def ',
-      context.convert(node.name),
+      opts.isConstructor ? '__init__' : context.convert(node.name),
       '(',
-      new OTree([], context.convertAll(node.parameters), {
+      new OTree([], [
+        opts.inClass ? 'self' : undefined,
+        ...context.convertAll(node.parameters)
+      ], {
         separator: ', ',
       }),
-      ')',
+      '): ',
     ], [context.convert(node.body)], {
       suffix: '\n\n'
     });
@@ -156,12 +167,60 @@ export class PythonVisitor extends DefaultVisitor {
     ]);
   }
 
+  public forOfStatement(node: ts.ForOfStatement, context: AstContext): OTree {
+    // This is what a "for (const x of ...)" looks like in the AST
+    let variableName = '???';
+
+    matchAst(node.initializer,
+      nodeOfType(ts.SyntaxKind.VariableDeclarationList,
+        nodeOfType('var', ts.SyntaxKind.VariableDeclaration)),
+      bindings => {
+        variableName = mangleIdentifier(context.textOf(bindings.var.name));
+      });
+
+    return new OTree([
+      'for ',
+      variableName,
+      ' in ',
+      context.convert(node.expression),
+      ': '
+    ], [context.convert(node.statement)]);
+  }
+
+  public classDeclaration(node: ts.ClassDeclaration, context: AstContext): OTree {
+    const heritage = flat(Array.from(node.heritageClauses || []).map(h => Array.from(h.types))).map(t => context.convert(t.expression));
+    const hasHeritage = heritage.length > 0;
+
+    const members = context.convertAll(node.members);
+    if (members.length === 0) {
+      members.push(new OTree(['pass']));
+    }
+
+    return new OTree([
+      'class ',
+      node.name ? context.textOf(node.name) : '???',
+      hasHeritage ? '(' : '',
+      ...heritage,
+      hasHeritage ? ')' : '',
+      ': ',
+    ], members, {
+      separator: '\n\n',
+      newline: true,
+      indent: 4,
+      suffix: '\n\n',
+    });
+  }
+
+  public propertyDeclaration(_node: ts.PropertyDeclaration, _context: AstContext): OTree {
+    return new OTree([]);
+  }
+
   protected convertModuleReference(ref: string) {
     return ref.replace(/^@/, '').replace(/\//g, '.').replace(/-/g, '_');
   }
 }
 
-export function mangleIdentifier(originalIdentifier: string) {
+function mangleIdentifier(originalIdentifier: string) {
   if (startsWithUppercase(originalIdentifier)) {
     // Probably a class, leave as-is
     return originalIdentifier;
@@ -207,3 +266,7 @@ const BUILTIN_FUNCTIONS: {[key: string]: string} = {
   'console.error': 'sys.stderr.write',
   'Math.random': 'random.random'
 };
+
+function flat<A>(xs: A[][]): A[] {
+  return Array.prototype.concat.apply([], xs);
+}

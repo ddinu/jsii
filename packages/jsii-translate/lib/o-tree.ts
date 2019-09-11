@@ -23,17 +23,22 @@ export interface OTreeOptions {
 }
 
 export class OTree {
+  private readonly prefix: Array<OTree | string>;
+  private readonly children: Array<OTree | string>;
+
   constructor(
-    private readonly prefix: Array<string | OTree>,
-    private readonly children?: OTree[],
+    prefix: Array<OTree | string | undefined>,
+    children?: Array<OTree | string | undefined>,
     private readonly options: OTreeOptions = {}) {
+
+    this.prefix = prefix.filter(notUndefined).filter(notEmpty);
+    this.children = (children || []).filter(notUndefined).filter(notEmpty);
   }
 
   public write(sink: OTreeSink) {
     const indent = this.options.indent || 0;
 
-    const xs = Array.isArray(this.prefix) ? this.prefix : [this.prefix];
-    for (const x of xs) {
+    for (const x of this.prefix) {
       sink.write(x);
     }
 
@@ -45,7 +50,7 @@ export class OTree {
       if (!first && this.options.separator) { sink.write(this.options.separator); }
       first = false;
 
-      child.write(sink);
+      sink.write(child);
     }
 
     sink.adjustIndent(-indent);
@@ -53,6 +58,10 @@ export class OTree {
     if (this.options.suffix) {
       sink.write(this.options.suffix);
     }
+  }
+
+  public get isEmpty() {
+    return this.prefix.length + this.children.length === 0;
   }
 
   public toString() {
@@ -93,4 +102,12 @@ export class OTreeSink {
   private append(x: string) {
     this.fragments.push(x);
   }
+}
+
+function notUndefined<T>(x: T | undefined): x is T {
+  return x !== undefined;
+}
+
+function notEmpty(x: OTree | string) {
+  return x instanceof OTree ? !x.isEmpty : x !== '';
 }
