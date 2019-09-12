@@ -18,7 +18,7 @@ export function inTempDir<T>(block: () => T): T {
   return ret;
 }
 
-export async function visualizeTypeScriptAst(source: Source) {
-  const vis = await translateTypeScript(source, new VisualizeAstVisitor());
-  return renderTree(vis.tree);
+export function visualizeTypeScriptAst(source: Source) {
+  const vis = translateTypeScript(source, new VisualizeAstVisitor(true), );
+  return renderTree(vis.tree) + '\n';
 }

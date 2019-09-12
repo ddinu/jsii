@@ -3,10 +3,10 @@ import ts = require('typescript');
 import { transformMarkdown } from './markdown/markdown';
 import { MarkdownRenderer } from './markdown/markdown-renderer';
 import { ReplaceCodeTransform } from './markdown/replace-code-renderer';
-import { OTree, OTreeSink } from './o-tree';
+import { OTree, renderTree } from './o-tree';
 import { TypeScriptCompiler } from './typescript/ts-compiler';
 import { inTempDir } from './util';
-import { AstVisitor, TranslateResult, visitTree } from './visitor';
+import { AstVisitor, TranslateResult, VisitOptions, visitTree } from './visitor';
 
 export interface Source {
   withFile<A>(fn: (fileName: string) => A): A;
@@ -41,7 +41,7 @@ export class LiteralSource implements Source {
   }
 }
 
-export function translateMarkdown(markdown: Source, visitor: AstVisitor): TranslateResult {
+export function translateMarkdown(markdown: Source, visitor: AstVisitor, options: TranslateOptions = {}): TranslateResult {
   const compiler = new TypeScriptCompiler();
 
   let index = 0;
@@ -53,34 +53,30 @@ export function translateMarkdown(markdown: Source, visitor: AstVisitor): Transl
 
       index += 1;
       const snippetSource = new LiteralSource(code.source, `${filename}-snippet${index}.ts`);
-      const snippetTranslation = translateSnippet(snippetSource, compiler, visitor);
+      const snippetTranslation = translateSnippet(snippetSource, compiler, visitor, options);
 
       diagnostics.push(...snippetTranslation.diagnostics);
 
-      return { language: '', source: renderTree(snippetTranslation.tree) };
+      return { language: '', source: renderTree(snippetTranslation.tree) + '\n' };
     }));
   });
 
   return { tree: new OTree([translatedMarkdown]), diagnostics };
 }
 
-export function translateTypeScript(source: Source, visitor: AstVisitor): TranslateResult {
+export type TranslateOptions = VisitOptions;
+
+export function translateTypeScript(source: Source, visitor: AstVisitor, options: TranslateOptions = {}): TranslateResult {
   const compiler = new TypeScriptCompiler();
 
-  return translateSnippet(source, compiler, visitor);
+  return translateSnippet(source, compiler, visitor, options);
 }
 
-function translateSnippet(source: Source, compiler: TypeScriptCompiler, visitor: AstVisitor): TranslateResult {
+function translateSnippet(source: Source, compiler: TypeScriptCompiler, visitor: AstVisitor, options: TranslateOptions = {}): TranslateResult {
   return source.withContents((filename, contents) => {
     const result = compiler.compileInMemory(filename, contents);
-    return visitTree(result.rootFile, result.rootFile, visitor);
+    return visitTree(result.rootFile, result.rootFile, visitor, options);
   });
-}
-
-export function renderTree(tree: OTree): string {
-  const sink = new OTreeSink();
-  tree.write(sink);
-  return sink.toString() + '\n';
 }
 
 export function printDiagnostics(diags: ts.Diagnostic[], stream: NodeJS.WritableStream) {

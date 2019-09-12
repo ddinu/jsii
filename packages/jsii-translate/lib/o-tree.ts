@@ -23,6 +23,10 @@ export interface OTreeOptions {
 }
 
 export class OTree {
+  public static simplify(xs: Array<OTree | string | undefined>): Array<OTree | string> {
+    return xs.filter(notUndefined).filter(notEmpty);
+  }
+
   private readonly prefix: Array<OTree | string>;
   private readonly children: Array<OTree | string>;
 
@@ -31,8 +35,8 @@ export class OTree {
     children?: Array<OTree | string | undefined>,
     private readonly options: OTreeOptions = {}) {
 
-    this.prefix = prefix.filter(notUndefined).filter(notEmpty);
-    this.children = (children || []).filter(notUndefined).filter(notEmpty);
+    this.prefix = OTree.simplify(prefix);
+    this.children = OTree.simplify(children || []);
   }
 
   public write(sink: OTreeSink) {
@@ -69,7 +73,7 @@ export class OTree {
   }
 }
 
-export const EMPTY_NODE = new OTree([]);
+export const NO_SYNTAX = new OTree([]);
 
 export class UnknownSyntax extends OTree {
 }
@@ -110,4 +114,10 @@ function notUndefined<T>(x: T | undefined): x is T {
 
 function notEmpty(x: OTree | string) {
   return x instanceof OTree ? !x.isEmpty : x !== '';
+}
+
+export function renderTree(tree: OTree): string {
+  const sink = new OTreeSink();
+  tree.write(sink);
+  return sink.toString();
 }

@@ -770,13 +770,13 @@ class StructField implements PythonBase {
     }
 
     public emitDocString(code: CodeMaker) {
-        emitDocString(code, this.docs);
+        emitDocString(code, this.docs, { documentableItem: `prop-${this.pythonName}` });
     }
 
     public emit(code: CodeMaker, resolver: TypeResolver) {
         const resolvedType = this.typeAnnotation(resolver);
         code.line(`${this.pythonName}: ${resolvedType}`);
-        emitDocString(code, this.docs);
+        this.emitDocString(code);
     }
 }
 
@@ -955,7 +955,7 @@ class EnumMember implements PythonBase {
 
     public emit(code: CodeMaker, _resolver: TypeResolver) {
         code.line(`${this.pythonName} = "${this.value}"`);
-        emitDocString(code, this.docs);
+        emitDocString(code, this.docs, { documentableItem: `enum-${this.pythonName}` });
     }
 }
 
